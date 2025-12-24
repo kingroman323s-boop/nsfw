@@ -142,7 +142,7 @@ async def start_webserver(application: Application):
 
 
 # ─────────────────────────────────────────────
-# SELF PING (NO UPTIME BOT NEEDED)
+# SELF PING (RENDER)
 # ─────────────────────────────────────────────
 async def keep_alive():
     url = os.environ.get("RENDER_EXTERNAL_URL")
@@ -161,7 +161,7 @@ async def keep_alive():
 
 
 # ─────────────────────────────────────────────
-# STARTUP HOOK
+# POST INIT (THIS WAS THE MAIN BUG)
 # ─────────────────────────────────────────────
 async def post_init(application: Application):
     asyncio.create_task(start_webserver(application))
@@ -180,7 +180,12 @@ async def post_init(application: Application):
 # MAIN
 # ─────────────────────────────────────────────
 def main():
-    application = ApplicationBuilder().token(BOT_TOKEN).build()
+    application = (
+        ApplicationBuilder()
+        .token(BOT_TOKEN)
+        .post_init(post_init)   # ✅ CORRECT WAY
+        .build()
+    )
 
     # Commands
     application.add_handler(CommandHandler("approve", approve))
@@ -188,7 +193,7 @@ def main():
     application.add_handler(CommandHandler("badd", badd))
     application.add_handler(CommandHandler("bstick", bstick))
 
-    # Callback
+    # Callback buttons
     application.add_handler(
         CallbackQueryHandler(unverify_button, pattern="^unverify:")
     )
@@ -209,7 +214,7 @@ def main():
         MessageHandler(filters.PHOTO, monitor_images)
     )
 
-    application.post_init = post_init
+    print("🤖 Bot polling started...")
     application.run_polling()
 
 
