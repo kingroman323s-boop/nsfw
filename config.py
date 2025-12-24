@@ -19,13 +19,3 @@ RENDER_EXTERNAL_URL = os.environ.get("RENDER_EXTERNAL_URL")
 
 DELETE_DELAY = 120
 
-# # PYTHON_VERSION=3.10.13
-
-# DELETE_DELAY = 120
-# SUPPORT_CHAT_ID=-1002641745655
-# BOT_TOKEN="8179093437:AAFEuViafDkyWyjDkwOOBIxoZT2gsaLV_AI"
-# MONGO_URI="mongodb+srv://rudraxgame_db_user:Rudrax0607@gamblebot.iw8dger.mongodb.net/?appName=GAMBLEBOT"
-# OWNER_ID=7562158122
-
-# # RENDER_EXTERNAL_URL="https://nsfw-h3r0.onrender.com"
-# LOG_GROUP_ID=-1002641745655
