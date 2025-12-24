@@ -4,9 +4,9 @@ from utils import normalize
 from config import OWNER_ID, DELETE_DELAY
 
 
-# ---------------------------
+# ─────────────────────────────────────────────
 # AUTO BADWORDS (NORMALIZED)
-# ---------------------------
+# ─────────────────────────────────────────────
 AUTO_BADWORDS = {
     # English
     "fuck", "fucking", "shit", "bitch", "asshole", "dick", "pussy",
@@ -19,27 +19,27 @@ AUTO_BADWORDS = {
     "gaand", "gand", "randi",
     "harami", "kamina",
 
-    # Short forms (handled carefully)
+    # Short forms
     "bc", "mc", "bdsk"
 }
 
 AUTO_BADWORDS = {normalize(w) for w in AUTO_BADWORDS}
 
 
-# ---------------------------
-# DELETE MESSAGE AFTER DELAY
-# ---------------------------
-async def delete_later(context, chat_id, msg_id):
-    await asyncio.sleep(DELETE_DELAY)
+# ─────────────────────────────────────────────
+# SAFE DELETE TASK
+# ─────────────────────────────────────────────
+async def delete_later(bot, chat_id, msg_id, delay=DELETE_DELAY):
+    await asyncio.sleep(delay)
     try:
-        await context.bot.delete_message(chat_id, msg_id)
+        await bot.delete_message(chat_id, msg_id)
     except Exception:
         pass
 
 
-# ---------------------------
+# ─────────────────────────────────────────────
 # MAIN TEXT MONITOR
-# ---------------------------
+# ─────────────────────────────────────────────
 async def monitor_text(update, context):
     msg = update.message
     if not msg or not msg.text:
@@ -47,50 +47,82 @@ async def monitor_text(update, context):
 
     chat = msg.chat
 
-    # ❌ Ignore private chats
+    # Ignore private chats
     if chat.type == "private":
         return
 
-    # ❌ Group not verified
+    # Group not verified
     if not is_group_verified(chat.id):
         return
 
     user = msg.from_user
 
-    # 👑 Owner bypass
+    # Owner bypass
     if user.id == OWNER_ID:
         return
 
-    # ✅ Approved user bypass
+    # Approved user bypass
     if users.find_one({"user_id": user.id, "approved": True}):
         return
 
     text = normalize(msg.text)
 
-    # ---------------------------
+    # ─────────────────────────────────────────
     # AUTO BADWORDS CHECK
-    # ---------------------------
+    # ─────────────────────────────────────────
     for word in AUTO_BADWORDS:
-        # short words need exact containment
+        detected = False
+
         if len(word) <= 3:
-            if text == word or text.startswith(word) or text.endswith(word):
-                context.application.create_task(
-                    delete_later(context, chat.id, msg.message_id)
-                )
-                return
+            if f" {word} " in f" {text} ":
+                detected = True
         else:
             if word in text:
-                context.application.create_task(
-                    delete_later(context, chat.id, msg.message_id)
-                )
-                return
+                detected = True
 
-    # ---------------------------
-    # MANUAL BADWORDS FROM DB
-    # ---------------------------
-    for bw in badwords.find({}, {"word": 1}):
-        if bw["word"] in text:
+        if detected:
+            # Warning message
+            warn_msg = await context.bot.send_message(
+                chat_id=chat.id,
+                text=(
+                    "⚠️ <b>Warning</b>\n\n"
+                    f"Your message will be deleted in "
+                    f"<b>{DELETE_DELAY}</b> seconds."
+                ),
+                parse_mode="HTML",
+                reply_to_message_id=msg.message_id
+            )
+
+            # Schedule deletions
             context.application.create_task(
-                delete_later(context, chat.id, msg.message_id)
+                delete_later(context.bot, chat.id, msg.message_id)
+            )
+            context.application.create_task(
+                delete_later(context.bot, chat.id, warn_msg.message_id)
+            )
+            return
+
+    # ─────────────────────────────────────────
+    # DATABASE BADWORDS CHECK
+    # ─────────────────────────────────────────
+    for bw in badwords.find({}, {"word": 1}):
+        bw_word = normalize(bw["word"])
+        if bw_word in text:
+            warn_msg = await context.bot.send_message(
+                chat_id=chat.id,
+                text=(
+                    "⚠️ <b>Warning</b>\n\n"
+                    f"Your message will be deleted in "
+                    f"<b>{DELETE_DELAY}</b> seconds."
+                ),
+                parse_mode="HTML",
+                reply_to_message_id=msg.message_id
+            )
+
+            context.application.create_task(
+                delete_later(context.bot, chat.id, msg.message_id)
+            )
+            context.application.create_task(
+                delete_later(context.bot, chat.id, warn_msg.message_id)
             )
             return
