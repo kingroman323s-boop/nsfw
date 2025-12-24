@@ -5,3 +5,4 @@ unidecode
 nudenet
 opencv-python-headless
 Pillow
+aiohttp
