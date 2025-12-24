@@ -17,5 +17,5 @@ RENDER_EXTERNAL_URL = os.environ.get("RENDER_EXTERNAL_URL")
 # OPTIONAL / CONSTANT SETTINGS
 # ─────────────────────────────────────────────
 
-DELETE_DELAY = 120
+DELETE_DELAY = 1
 
