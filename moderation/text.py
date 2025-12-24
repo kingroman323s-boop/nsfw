@@ -4,22 +4,14 @@ from utils import normalize
 from config import OWNER_ID, DELETE_DELAY
 
 
-# ─────────────────────────────────────────────
-# AUTO BADWORDS (NORMALIZED)
-# ─────────────────────────────────────────────
 AUTO_BADWORDS = {
-    # English
     "fuck", "fucking", "shit", "bitch", "asshole", "dick", "pussy",
     "porn", "sex", "nude", "xxx", "boobs", "blowjob",
-
-    # Hindi / Hinglish
     "bhosdike", "bhosdi", "bhosda",
     "madarchod", "behenchod",
     "chutiya", "chut", "lund",
     "gaand", "gand", "randi",
     "harami", "kamina",
-
-    # Short forms
     "bc", "mc", "bdsk"
 }
 
@@ -27,18 +19,18 @@ AUTO_BADWORDS = {normalize(w) for w in AUTO_BADWORDS}
 
 
 # ─────────────────────────────────────────────
-# SAFE DELETE TASK
+# DELETE TASK (WITH LOGGING)
 # ─────────────────────────────────────────────
 async def delete_later(bot, chat_id, msg_id, delay=DELETE_DELAY):
     await asyncio.sleep(delay)
     try:
         await bot.delete_message(chat_id, msg_id)
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"❌ Delete failed: {e}")
 
 
 # ─────────────────────────────────────────────
-# MAIN TEXT MONITOR
+# MAIN MONITOR
 # ─────────────────────────────────────────────
 async def monitor_text(update, context):
     msg = update.message
@@ -46,83 +38,66 @@ async def monitor_text(update, context):
         return
 
     chat = msg.chat
-
-    # Ignore private chats
     if chat.type == "private":
         return
 
-    # Group not verified
     if not is_group_verified(chat.id):
         return
 
     user = msg.from_user
-
-    # Owner bypass
     if user.id == OWNER_ID:
         return
 
-    # Approved user bypass
     if users.find_one({"user_id": user.id, "approved": True}):
         return
 
     text = normalize(msg.text)
 
-    # ─────────────────────────────────────────
-    # AUTO BADWORDS CHECK
-    # ─────────────────────────────────────────
+    # BADWORD CHECK
+    detected = False
     for word in AUTO_BADWORDS:
-        detected = False
-
         if len(word) <= 3:
             if f" {word} " in f" {text} ":
                 detected = True
+                break
         else:
             if word in text:
                 detected = True
+                break
 
-        if detected:
-            # Warning message
-            warn_msg = await context.bot.send_message(
-                chat_id=chat.id,
-                text=(
-                    "⚠️ <b>Warning</b>\n\n"
-                    f"Your message will be deleted in "
-                    f"<b>{DELETE_DELAY}</b> seconds."
-                ),
-                parse_mode="HTML",
-                reply_to_message_id=msg.message_id
-            )
+    if not detected:
+        for bw in badwords.find({}, {"word": 1}):
+            if normalize(bw["word"]) in text:
+                detected = True
+                break
 
-            # Schedule deletions
-            context.application.create_task(
-                delete_later(context.bot, chat.id, msg.message_id)
-            )
-            context.application.create_task(
-                delete_later(context.bot, chat.id, warn_msg.message_id)
-            )
-            return
+    if not detected:
+        return
 
     # ─────────────────────────────────────────
-    # DATABASE BADWORDS CHECK
+    # SEND WARNING (NO REPLY MODE)
     # ─────────────────────────────────────────
-    for bw in badwords.find({}, {"word": 1}):
-        bw_word = normalize(bw["word"])
-        if bw_word in text:
-            warn_msg = await context.bot.send_message(
-                chat_id=chat.id,
-                text=(
-                    "⚠️ <b>Warning</b>\n\n"
-                    f"Your message will be deleted in "
-                    f"<b>{DELETE_DELAY}</b> seconds."
-                ),
-                parse_mode="HTML",
-                reply_to_message_id=msg.message_id
-            )
+    try:
+        warn_msg = await context.bot.send_message(
+            chat_id=chat.id,
+            text=(
+                "⚠️ <b>Warning</b>\n\n"
+                f"This message violates rules and will be deleted in "
+                f"<b>{DELETE_DELAY}</b> seconds."
+            ),
+            parse_mode="HTML"
+        )
+    except Exception as e:
+        print(f"❌ Warning send failed: {e}")
+        return
 
-            context.application.create_task(
-                delete_later(context.bot, chat.id, msg.message_id)
-            )
-            context.application.create_task(
-                delete_later(context.bot, chat.id, warn_msg.message_id)
-            )
-            return
+    # ─────────────────────────────────────────
+    # SCHEDULE DELETIONS
+    # ─────────────────────────────────────────
+    context.application.create_task(
+        delete_later(context.bot, chat.id, msg.message_id)
+    )
+    context.application.create_task(
+        delete_later(context.bot, chat.id, warn_msg.message_id)
+    )
+
